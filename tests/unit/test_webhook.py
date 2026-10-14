@@ -12,7 +12,12 @@ import pytest
 
 from app.models import Currency, Payment, PaymentStatus
 from app.services.egress import EgressGuard
-from app.services.webhook import HttpWebhookSender, WebhookBlockedError, WebhookDeliveryError
+from app.services.webhook import (
+    HttpWebhookSender,
+    WebhookBlockedError,
+    WebhookDeliveryError,
+    create_webhook_client,
+)
 
 SECRET = "test-secret"
 NOW = 1_800_000_000
@@ -171,3 +176,18 @@ async def test_whole_attempt_has_a_deadline() -> None:
 
     with pytest.raises(WebhookDeliveryError, match="No response within"):
         await sender(handler, timeout=0.05).send(make_payment())
+
+
+async def test_client_ignores_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HTTP_PROXY", "http://proxy.internal:3128")
+    monkeypatch.setenv("HTTPS_PROXY", "http://proxy.internal:3128")
+
+    default = httpx.AsyncClient()  # trust_env=True: the proxy from the environment is used
+    client = create_webhook_client(timeout=5)
+    try:
+        assert any(transport is not None for transport in default._mounts.values())
+        assert client.trust_env is False
+        assert not any(transport is not None for transport in client._mounts.values())
+    finally:
+        await default.aclose()
+        await client.aclose()

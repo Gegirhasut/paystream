@@ -224,6 +224,9 @@ valid = hmac.compare_digest(expected, signature) and abs(time.time() - int(times
   проверяется по имени), поэтому подменить адрес вторым DNS-ответом (DNS rebinding) нельзя.
 - Webhook на внутренний адрес не ретраится: сообщение сразу уходит в DLQ.
 - Редиректы не выполняются, тело ответа не читается.
+- HTTP-клиент webhook не берёт настройки из окружения (`trust_env=False`): ни
+  `HTTP(S)_PROXY`, ни логины из `~/.netrc`, ни `SSL_CERT_*`. Иначе маршрут и учётные
+  данные запросов на адрес, заданный клиентом, определяло бы окружение, а не код.
 
 Исключения задаются явно, списком имён в `WEBHOOK_ALLOWED_INTERNAL_HOSTS`; в compose там
 только демо-приёмник `webhook-receiver`. Попытка отправить webhook на `postgres`,

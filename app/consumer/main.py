@@ -2,7 +2,6 @@ import asyncio
 import contextlib
 import sys
 
-import httpx
 from faststream import FastStream
 
 from app.config import Settings, get_settings
@@ -16,7 +15,7 @@ from app.messaging.topology import build_topology
 from app.services.egress import EgressGuard
 from app.services.gateway import EmulatedPaymentGateway
 from app.services.processor import PaymentProcessor
-from app.services.webhook import HttpWebhookSender
+from app.services.webhook import HttpWebhookSender, create_webhook_client
 
 
 def create_app(settings: Settings) -> tuple[FastStream, SubscriptionWatchdog]:
@@ -27,7 +26,7 @@ def create_app(settings: Settings) -> tuple[FastStream, SubscriptionWatchdog]:
     topology = build_topology(settings.retry_max_attempts, settings.retry_base_delay)
 
     engine = create_engine(settings)
-    http_client = httpx.AsyncClient(timeout=settings.webhook_timeout)
+    http_client = create_webhook_client(settings.webhook_timeout)
     processor = PaymentProcessor(
         session_factory=create_session_factory(engine),
         gateway=EmulatedPaymentGateway(

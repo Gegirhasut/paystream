@@ -45,6 +45,14 @@ def build_webhook(payment: Payment) -> PaymentWebhook:
     )
 
 
+def create_webhook_client(timeout: float) -> httpx.AsyncClient:
+    # trust_env=False: the client must not pick up HTTP(S)_PROXY (traffic to client
+    # chosen URLs would take a route nobody chose for it), ~/.netrc credentials
+    # (they would be sent to whatever host the client named) or SSL_CERT_* from the
+    # environment. Where webhooks go is decided here, not by the deployment env.
+    return httpx.AsyncClient(timeout=timeout, trust_env=False)
+
+
 def sign(secret: str, timestamp: str, body: bytes) -> str:
     """HMAC-SHA256 over "<timestamp>.<body>"; the timestamp lets the merchant reject replays."""
     digest = hmac.new(secret.encode(), timestamp.encode() + b"." + body, hashlib.sha256)
