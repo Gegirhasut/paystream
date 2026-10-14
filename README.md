@@ -33,7 +33,7 @@ RabbitMQ 3.13 (FastStream), Alembic, Docker / docker-compose, pytest.
 ### 2. Запуск
 
 ```bash
-git clone <repo-url> payments-service && cd payments-service
+git clone https://github.com/Gegirhasut/paystream.git && cd paystream
 cp .env.example .env
 docker compose up -d --build        # или: make up
 ```
