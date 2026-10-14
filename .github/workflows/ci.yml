@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Lint
+        run: make lint
+
+      # Real PostgreSQL and RabbitMQ from docker-compose, migrations included.
+      - name: Tests
+        run: make test
+
+      - name: Service logs
+        if: failure()
+        run: docker compose logs postgres rabbitmq
+
+      - name: Stop services
+        if: always()
+        run: docker compose down -v

@@ -1,5 +1,7 @@
 # Payments Service
 
+[![CI](https://github.com/Gegirhasut/paystream/actions/workflows/ci.yml/badge.svg)](https://github.com/Gegirhasut/paystream/actions/workflows/ci.yml)
+
 Микросервис асинхронной обработки платежей. Принимает запрос на оплату, обрабатывает его
 через эмулятор платёжного шлюза и уведомляет клиента о результате через webhook.
 
@@ -585,7 +587,8 @@ docker compose up -d postgres rabbitmq
 docker compose run --rm --build tests
 ```
 
-Линтер: `make lint` (ruff).
+Линтер: `make lint` (ruff). То же самое (линтер и все тесты) запускает CI на каждый push:
+`.github/workflows/ci.yml`.
 
 Что покрыто (194 теста):
 
@@ -650,6 +653,7 @@ tests/                unit + integration
 docker/postgres/      Init-скрипт (создание БД для тестов)
 Dockerfile            Образ приложения (stage base) и тестов (stage test)
 docker-compose.yml
+.github/workflows/    CI: линтер и тесты на каждый push
 ```
 
 ### Осознанные компромиссы и ограничения
@@ -674,7 +678,6 @@ docker-compose.yml
 ### Возможные улучшения для продакшена
 
 - Партиционирование `payments` по дате при очень больших объёмах.
-- CI (GitHub Actions: `make lint`, `make test`).
 - Метрики (Prometheus) и трассировка; алерт на непустую DLQ.
 - Инструмент для переотправки сообщений из DLQ после устранения причины.
 - Quorum-очереди вместо классических: репликация, at-least-once dead-lettering и

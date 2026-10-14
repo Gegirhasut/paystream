@@ -6,3 +6,6 @@ __pycache__/
 .ruff_cache/
 .coverage
 htmlcov/
+
+# Assignment text, kept out of the public repository
+tz.pdf
