@@ -20,7 +20,10 @@ jobs:
 
       - name: Service logs
         if: failure()
-        run: docker compose logs postgres rabbitmq
+        run: |
+          docker compose ps -a
+          for c in $(docker compose ps -aq); do docker inspect --format '{{.Name}} {{json .State.Health}}' "$c"; done
+          docker compose logs postgres rabbitmq
 
       - name: Stop services
         if: always()

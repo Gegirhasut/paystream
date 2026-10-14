@@ -71,7 +71,7 @@ services:
       # the very first boot may create .erlang.cookie before the server does.
       test:
         - CMD-SHELL
-        - wget -qO- "http://$${RABBITMQ_DEFAULT_USER}:$${RABBITMQ_DEFAULT_PASS}@localhost:15672/api/health/checks/virtual-hosts" | grep -q '"ok"'
+        - wget -qO- "http://$${RABBITMQ_DEFAULT_USER}:$${RABBITMQ_DEFAULT_PASS}@127.0.0.1:15672/api/health/checks/virtual-hosts" | grep -q '"ok"'
       interval: 10s
       timeout: 10s
       start_period: 60s
