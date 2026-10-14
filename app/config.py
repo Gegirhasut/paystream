@@ -49,6 +49,11 @@ class Settings(BaseSettings):
     retry_base_delay: PositiveFloat = 2.0
 
     webhook_timeout: PositiveFloat = 5.0
+    # Key of the HMAC signature in every webhook (see app/services/webhook.py).
+    webhook_secret: str = Field(min_length=1)
+    # Comma-separated host names a webhook may reach although they resolve to an
+    # internal address; everything else must be public (SSRF protection).
+    webhook_allowed_internal_hosts: str = ""
 
     # Recovery of stalled payments: one with no webhook delivered and no progress
     # for this long (its message was lost somewhere) is dispatched again.
@@ -83,6 +88,10 @@ class Settings(BaseSettings):
         if self.outbox_retention_hours * 3600 <= self.recovery_after:
             raise ValueError("OUTBOX_RETENTION_HOURS must exceed RECOVERY_AFTER")
         return self
+
+    @property
+    def allowed_internal_hosts(self) -> list[str]:
+        return [h.strip() for h in self.webhook_allowed_internal_hosts.split(",") if h.strip()]
 
     @property
     def max_processing_time(self) -> float:

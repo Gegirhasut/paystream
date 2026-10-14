@@ -59,3 +59,14 @@ def test_timeouts_must_be_consistent(overrides: dict, message: str) -> None:
 def test_defaults_are_consistent() -> None:
     settings = Settings(api_key="key", _env_file=None)
     assert settings.max_processing_time < settings.recovery_after
+
+
+def test_webhook_secret_is_required(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("WEBHOOK_SECRET", raising=False)
+    with pytest.raises(ValidationError, match="webhook_secret"):
+        Settings(api_key="key", _env_file=None)
+
+
+def test_allowed_internal_hosts_are_a_comma_separated_list() -> None:
+    settings = Settings(api_key="key", webhook_allowed_internal_hosts=" a , b,,", _env_file=None)
+    assert settings.allowed_internal_hosts == ["a", "b"]

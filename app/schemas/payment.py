@@ -9,6 +9,7 @@ from typing import Annotated, Any
 from pydantic import AfterValidator, AnyHttpUrl, BaseModel, BeforeValidator, ConfigDict, Field
 
 from app.models import Currency, PaymentStatus
+from app.services.egress import is_ip_literal, is_public_address
 
 CENTS = Decimal("0.01")
 MAX_METADATA_BYTES = 16 * 1024
@@ -59,6 +60,19 @@ def _normalize_metadata(value: dict[str, Any]) -> dict[str, Any]:
 Metadata = Annotated[dict[str, Any], AfterValidator(_normalize_metadata)]
 
 
+def _reject_internal_address(url: AnyHttpUrl) -> AnyHttpUrl:
+    # An early 422 for obviously internal targets. Host names are checked when the
+    # webhook is sent, after DNS resolution (app/services/egress.py).
+    host = (url.host or "").strip("[]").lower()
+    internal_ip = is_ip_literal(host) and not is_public_address(host)
+    if host == "localhost" or host.endswith(".localhost") or internal_ip:
+        raise ValueError("webhook_url must point to a public address")
+    return url
+
+
+WebhookUrl = Annotated[AnyHttpUrl, AfterValidator(_reject_internal_address)]
+
+
 class PaymentCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -66,7 +80,7 @@ class PaymentCreate(BaseModel):
     currency: Currency
     description: str = Field(default="", max_length=1024)
     metadata: Metadata = Field(default_factory=dict)
-    webhook_url: AnyHttpUrl = Field(examples=["https://merchant.example.com/webhooks/payments"])
+    webhook_url: WebhookUrl = Field(examples=["https://merchant.example.com/webhooks/payments"])
 
 
 class PaymentAccepted(BaseModel):

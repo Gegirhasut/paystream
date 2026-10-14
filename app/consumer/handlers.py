@@ -8,6 +8,7 @@ from app.messaging.topology import Topology
 from app.schemas.events import PaymentCreatedEvent
 from app.services.exceptions import PaymentNotFoundError
 from app.services.processor import PaymentProcessor
+from app.services.webhook import WebhookBlockedError
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +33,8 @@ def register_handlers(
         logger.info("Processing payment %s, attempt %s", event.payment_id, attempt)
         try:
             await processor.process(event.payment_id)
-        except PaymentNotFoundError as exc:
+        except (PaymentNotFoundError, WebhookBlockedError) as exc:
+            # Permanent: retrying cannot help, straight to the DLQ.
             await failures.handle(
                 event, attempt, exc, retryable=False, message_id=message.message_id
             )

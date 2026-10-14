@@ -13,6 +13,7 @@ from app.db import create_engine, create_session_factory
 from app.logging_setup import setup_logging
 from app.messaging.connection import connect_with_retry, create_broker
 from app.messaging.topology import build_topology
+from app.services.egress import EgressGuard
 from app.services.gateway import EmulatedPaymentGateway
 from app.services.processor import PaymentProcessor
 from app.services.webhook import HttpWebhookSender
@@ -34,7 +35,12 @@ def create_app(settings: Settings) -> tuple[FastStream, SubscriptionWatchdog]:
             max_delay=settings.processing_max_delay,
             success_rate=settings.processing_success_rate,
         ),
-        webhook_sender=HttpWebhookSender(http_client, timeout=settings.webhook_timeout),
+        webhook_sender=HttpWebhookSender(
+            http_client,
+            secret=settings.webhook_secret,
+            guard=EgressGuard(settings.allowed_internal_hosts),
+            timeout=settings.webhook_timeout,
+        ),
         gateway_timeout=settings.gateway_timeout,
     )
     register_handlers(

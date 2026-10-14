@@ -17,7 +17,7 @@ from app.messaging.topology import (
 from app.models import Currency
 from app.schemas.events import PaymentCreatedEvent
 from app.services.exceptions import PaymentNotFoundError
-from app.services.webhook import WebhookDeliveryError
+from app.services.webhook import WebhookBlockedError, WebhookDeliveryError
 
 TOPOLOGY = build_topology(max_attempts=3, base_delay=2)
 
@@ -178,6 +178,16 @@ class TestHandler:
             await publish(broker, make_event())
 
         assert failures.calls[0][2:] == (PaymentNotFoundError, False)
+
+    async def test_blocked_webhook_url_is_not_retried(self) -> None:
+        processor = FakeProcessor(WebhookBlockedError("10.0.0.5 is internal"))
+        failures = SpyFailures()
+        broker = make_broker(processor, failures)
+
+        async with TestRabbitBroker(broker):
+            await publish(broker, make_event())
+
+        assert failures.calls[0][2:] == (WebhookBlockedError, False)
 
     async def test_invalid_message_is_rejected(self) -> None:
         processor, failures = FakeProcessor(), SpyFailures()

@@ -179,6 +179,18 @@ class TestCreatePayment:
             pytest.param(payment_payload(currency="rub"), id="lowercase-currency"),
             pytest.param(payment_payload(webhook_url="not-a-url"), id="invalid-url"),
             pytest.param(payment_payload(webhook_url="ftp://a.b/c"), id="non-http-url"),
+            pytest.param(
+                payment_payload(webhook_url="http://localhost:8000/x"), id="localhost-url"
+            ),
+            pytest.param(payment_payload(webhook_url="http://127.0.0.1/x"), id="loopback-url"),
+            pytest.param(payment_payload(webhook_url="http://10.0.0.5/x"), id="private-ip-url"),
+            pytest.param(
+                payment_payload(webhook_url="http://[::1]:8080/x"), id="ipv6-loopback-url"
+            ),
+            pytest.param(
+                payment_payload(webhook_url="http://169.254.169.254/latest/meta-data/"),
+                id="cloud-metadata-url",
+            ),
             pytest.param(payment_payload(metadata="string"), id="metadata-not-object"),
             pytest.param(
                 payment_payload(metadata={"blob": "x" * MAX_METADATA_BYTES}), id="metadata-too-big"

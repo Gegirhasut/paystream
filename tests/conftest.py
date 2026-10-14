@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.pool import NullPool
 
 os.environ.setdefault("API_KEY", "test-api-key")
+os.environ.setdefault("WEBHOOK_SECRET", "test-webhook-secret")
 os.environ.setdefault(
     "DATABASE_URL", "postgresql+asyncpg://payments:payments@localhost:5432/payments_test"
 )
