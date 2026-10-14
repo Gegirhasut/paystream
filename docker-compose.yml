@@ -1,0 +1,141 @@
+x-app: &app
+  build:
+    context: .
+    target: base
+  image: payments-service:latest
+  pull_policy: build
+  restart: unless-stopped
+  environment: &app-env
+    API_KEY: ${API_KEY:-change-me}
+    DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-payments}:${POSTGRES_PASSWORD:-payments}@postgres:5432/${POSTGRES_DB:-payments}
+    # heartbeat=20: a frozen or cut-off process is noticed (and its unacked messages go
+    # back to the queue) in under a minute instead of the default 2-3 minutes.
+    RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672/?heartbeat=20
+    PROCESSING_MIN_DELAY: ${PROCESSING_MIN_DELAY:-2}
+    PROCESSING_MAX_DELAY: ${PROCESSING_MAX_DELAY:-5}
+    PROCESSING_SUCCESS_RATE: ${PROCESSING_SUCCESS_RATE:-0.9}
+    GATEWAY_TIMEOUT: ${GATEWAY_TIMEOUT:-30}
+    RETRY_MAX_ATTEMPTS: ${RETRY_MAX_ATTEMPTS:-3}
+    RETRY_BASE_DELAY: ${RETRY_BASE_DELAY:-2}
+    WEBHOOK_TIMEOUT: ${WEBHOOK_TIMEOUT:-5}
+    CONSUMER_PREFETCH_COUNT: ${CONSUMER_PREFETCH_COUNT:-10}
+    CONSUMER_GRACEFUL_TIMEOUT: ${CONSUMER_GRACEFUL_TIMEOUT:-15}
+    CONSUMER_WATCHDOG_INTERVAL: ${CONSUMER_WATCHDOG_INTERVAL:-15}
+    DB_IDLE_IN_TRANSACTION_TIMEOUT: ${DB_IDLE_IN_TRANSACTION_TIMEOUT:-120}
+    DB_COMMAND_TIMEOUT: ${DB_COMMAND_TIMEOUT:-180}
+    RECOVERY_AFTER: ${RECOVERY_AFTER:-600}
+    RECOVERY_INTERVAL: ${RECOVERY_INTERVAL:-60}
+    RECOVERY_MAX_ATTEMPTS: ${RECOVERY_MAX_ATTEMPTS:-5}
+    OUTBOX_POLL_INTERVAL: ${OUTBOX_POLL_INTERVAL:-0.5}
+    OUTBOX_BATCH_SIZE: ${OUTBOX_BATCH_SIZE:-100}
+    OUTBOX_PUBLISH_TIMEOUT: ${OUTBOX_PUBLISH_TIMEOUT:-10}
+    OUTBOX_RETENTION_HOURS: ${OUTBOX_RETENTION_HOURS:-24}
+    OUTBOX_CLEANUP_INTERVAL: ${OUTBOX_CLEANUP_INTERVAL:-300}
+    LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-payments}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-payments}
+      POSTGRES_DB: ${POSTGRES_DB:-payments}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres/init-test-db.sh:/docker-entrypoint-initdb.d/init-test-db.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      # Management API instead of rabbitmq-diagnostics: the CLI runs as root and on
+      # the very first boot may create .erlang.cookie before the server does.
+      test:
+        - CMD-SHELL
+        - wget -qO- "http://$${RABBITMQ_DEFAULT_USER}:$${RABBITMQ_DEFAULT_PASS}@localhost:15672/api/health/checks/virtual-hosts" | grep -q '"ok"'
+      interval: 10s
+      timeout: 10s
+      start_period: 60s
+      retries: 30
+
+  migrations:
+    <<: *app
+    restart: "no"
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    <<: *app
+    command: ["uvicorn", "app.api.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  outbox-relay:
+    <<: *app
+    command: ["python", "-m", "app.outbox_relay"]
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+
+  consumer:
+    <<: *app
+    command: ["python", "-m", "app.consumer"]
+    stop_grace_period: 30s
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+
+  webhook-receiver:
+    <<: *app
+    command: ["uvicorn", "webhook_receiver.main:app", "--host", "0.0.0.0", "--port", "8080"]
+    ports:
+      - "${WEBHOOK_RECEIVER_PORT:-8080}:8080"
+
+  tests:
+    build:
+      context: .
+      target: test
+    profiles: ["test"]
+    environment:
+      <<: *app-env
+      API_KEY: test-api-key
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-payments}:${POSTGRES_PASSWORD:-payments}@postgres:5432/payments_test
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+  rabbitmq-data:
