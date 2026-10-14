@@ -8,10 +8,15 @@ from app.models import Payment, PaymentStatus
 from app.services.gateway import EmulatedPaymentGateway
 
 
-async def test_success_rate_is_respected() -> None:
-    gateway = EmulatedPaymentGateway(0, 0, success_rate=0.9, rng=random.Random(42))
+def payment_ids(count: int, seed: int = 42) -> list[uuid.UUID]:
+    rng = random.Random(seed)
+    return [uuid.UUID(int=rng.getrandbits(128), version=4) for _ in range(count)]
 
-    results = Counter([await gateway.charge(Payment(id=uuid.uuid4())) for _ in range(2000)])
+
+async def test_success_rate_is_respected() -> None:
+    gateway = EmulatedPaymentGateway(0, 0, success_rate=0.9)
+
+    results = Counter([await gateway.charge(Payment(id=i)) for i in payment_ids(2000)])
 
     assert 0.87 < results[PaymentStatus.SUCCEEDED] / 2000 < 0.93
     assert set(results) == {PaymentStatus.SUCCEEDED, PaymentStatus.FAILED}
@@ -39,24 +44,15 @@ async def test_waits_within_bounds(monkeypatch: pytest.MonkeyPatch) -> None:
     assert all(2 <= d <= 5 for d in delays)
 
 
-async def test_repeated_charge_returns_the_original_outcome() -> None:
-    gateway = EmulatedPaymentGateway(0, 0, success_rate=0.5, rng=random.Random(1))
-    payments = [Payment(id=uuid.uuid4()) for _ in range(50)]
+async def test_repeated_charge_returns_the_original_outcome_even_after_restart() -> None:
+    payments = [Payment(id=i) for i in payment_ids(50)]
 
-    first = [await gateway.charge(p) for p in payments]
-    second = [await gateway.charge(p) for p in payments]
+    first = [await EmulatedPaymentGateway(0, 0, success_rate=0.5).charge(p) for p in payments]
+    # A new instance stands for a restarted consumer: nothing is kept in memory.
+    second = [await EmulatedPaymentGateway(0, 0, success_rate=0.5).charge(p) for p in payments]
 
     assert first == second
     assert set(first) == {PaymentStatus.SUCCEEDED, PaymentStatus.FAILED}
-
-
-async def test_remembered_outcomes_are_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(EmulatedPaymentGateway, "MAX_REMEMBERED", 3)
-    gateway = EmulatedPaymentGateway(0, 0, success_rate=1)
-    for _ in range(10):
-        await gateway.charge(Payment(id=uuid.uuid4()))
-
-    assert len(gateway._outcomes) == 3
 
 
 def test_invalid_bounds() -> None:

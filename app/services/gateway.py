@@ -1,8 +1,6 @@
 import asyncio
 import logging
 import random
-import uuid
-from collections import OrderedDict
 from typing import Protocol
 
 from app.models import Payment, PaymentStatus
@@ -28,13 +26,14 @@ class PaymentGateway(Protocol):
 
 
 class EmulatedPaymentGateway:
-    """Stand-in for an external acquirer: random latency and outcome.
+    """Stand-in for an external acquirer: random latency, outcome by payment id.
 
-    Like a real acquirer it remembers outcomes by payment id, so a repeated
-    charge returns the original result instead of charging again.
+    A real acquirer keeps the outcome under the idempotency key, so a repeated
+    charge returns the original result. Here the outcome is derived from the
+    payment id instead of being stored: the same payment always gets the same
+    result, also after a consumer restart. Payment ids are random UUIDs, so the
+    success rate still holds across payments.
     """
-
-    MAX_REMEMBERED = 100_000
 
     def __init__(
         self,
@@ -49,19 +48,10 @@ class EmulatedPaymentGateway:
         self._max_delay = max_delay
         self._success_rate = success_rate
         self._rng = rng or random.Random()
-        self._outcomes: OrderedDict[uuid.UUID, PaymentStatus] = OrderedDict()
 
     async def charge(self, payment: Payment) -> PaymentStatus:
-        known = self._outcomes.get(payment.id)
-        if known is not None:
-            logger.info("Gateway already processed payment %s: %s", payment.id, known)
-            return known
-
         await asyncio.sleep(self._rng.uniform(self._min_delay, self._max_delay))
-        succeeded = self._rng.random() < self._success_rate
+        succeeded = random.Random(payment.id.int).random() < self._success_rate
         status = PaymentStatus.SUCCEEDED if succeeded else PaymentStatus.FAILED
-        self._outcomes[payment.id] = status
-        if len(self._outcomes) > self.MAX_REMEMBERED:
-            self._outcomes.popitem(last=False)
         logger.info("Gateway processed payment %s: %s", payment.id, status)
         return status
